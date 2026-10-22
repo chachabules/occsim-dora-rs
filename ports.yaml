@@ -1,0 +1,40 @@
+# 传感器实例清单：决定 dataflow.yml 里额外声明哪些实例端口。
+#
+# 端口命名规则：`{sensor}__{kind}`，例如 sensor=gps-mast + kind=gps → gps-mast__gps
+# 未在此声明的实例会自动回落到 8 路类型端口（image/pointcloud/gps/imu/ins/odom/state/health）。
+#
+# 新增传感器后必须重新生成并重启数据流：
+#   cargo run --release -- gen-dataflow
+#
+# 可用的 kind：image / pointcloud / gps / imu / ins / odom / state / health
+#
+# 示例（按需取消注释，sensor 取网页「接入程序」里显示的传感器 id）：
+# instances:
+#   - sensor: gps-mast
+#     kind: gps
+#   - sensor: imu-main
+#     kind: imu
+#   - sensor: lidar-bow
+#     kind: pointcloud
+#   - sensor: cam-bow
+#     kind: image
+
+instances: 
+  - sensor: gps-mast
+    kind: gps
+  - sensor: imu-main
+    kind: imu
+  - sensor: ins-main
+    kind: ins
+  - sensor: odom-main
+    kind: odom
+  - sensor: health
+    kind: health
+  - sensor: radar-mast
+    kind: odom
+  - sensor: rgb-bow
+    kind: image
+  - sensor: lidar-mast
+    kind: pointcloud
+  - sensor: state
+    kind: state

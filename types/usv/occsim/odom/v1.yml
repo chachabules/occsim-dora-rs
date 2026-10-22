@@ -1,0 +1,29 @@
+# OccSim（无人艇仿真）里程计协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/odom/v1.yml，因此 URN 为 usv/occsim/odom/v1/OdomState。
+#
+# 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
+# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  OdomState:
+    arrow: Struct
+    description: "里程计：位置（m）、速度（m/s）、航向（rad）、累计航程（m）"
+    fields:
+      - name: px
+        type: Float64
+      - name: py
+        type: Float64
+      - name: pz
+        type: Float64
+      - name: vx
+        type: Float64
+      - name: vy
+        type: Float64
+      - name: vz
+        type: Float64
+      - name: heading
+        type: Float64
+      - name: distance
+        type: Float64

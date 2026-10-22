@@ -1,0 +1,23 @@
+# OccSim（无人艇仿真）点云传感器协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/pointcloud/v1.yml，因此 URN 为 usv/occsim/pointcloud/v1/PointCloud。
+#
+# 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
+# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  PointCloud:
+    arrow: Struct
+    description: "有序点云：data 为 pointCount 组小端 float32 x/y/z/intensity，传感器局部 FRD，单位 m"
+    fields:
+      - name: width
+        type: UInt32
+      - name: height
+        type: UInt32
+      - name: encoding
+        type: Utf8
+      - name: pointCount
+        type: UInt64
+      - name: data
+        type: LargeBinary

@@ -1,0 +1,10 @@
+# 仅作用于本 crate：用 rsproxy 镜像加速 crates.io 下载。
+# 不需要时直接删除本文件即可恢复默认源。
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true

@@ -1,0 +1,21 @@
+[package]
+name = "occsim-dora-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+# 只作为 client 连接 zenohd；remote-api 插件由 zenohd 子进程加载，
+# 本进程不再需要 plugins/unstable/internal 这套 unstable 特性。
+zenoh = "1.10.1"
+# 需要 arrow-v59：既用于 `dora_node_api::arrow_v59` 构造 StructArray，
+# 也启用 `IntoArrow for ArrayRef`，否则 `send_output` 无法接收编码结果。
+dora-node-api = { version = "1.1.0", features = ["arrow-v59"] }
+anyhow = "1"
+crossbeam-channel = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

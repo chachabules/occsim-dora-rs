@@ -1,0 +1,21 @@
+# OccSim（无人艇仿真）仿真状态协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/state/v1.yml，因此 URN 为 usv/occsim/state/v1/SimState。
+#
+# 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
+# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  SimState:
+    arrow: Struct
+    description: "仿真状态：仿真时刻（s）、是否暂停、控制模式与当前任务"
+    fields:
+      - name: simTime
+        type: Float64
+      - name: paused
+        type: Boolean
+      - name: controlMode
+        type: Utf8
+      - name: mission
+        type: Utf8

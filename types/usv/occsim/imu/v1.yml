@@ -1,0 +1,27 @@
+# OccSim（无人艇仿真）IMU 传感器协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/imu/v1.yml，因此 URN 为 usv/occsim/imu/v1/ImuSample。
+#
+# 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
+# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  ImuSample:
+    arrow: Struct
+    description: "IMU 比力（m/s²，艇体 FRD）与角速度（rad/s）"
+    fields:
+      - name: fx
+        type: Float64
+      - name: fy
+        type: Float64
+      - name: fz
+        type: Float64
+      - name: wx
+        type: Float64
+      - name: wy
+        type: Float64
+      - name: wz
+        type: Float64
+      - name: quality
+        type: Utf8

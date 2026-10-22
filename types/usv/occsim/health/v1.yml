@@ -1,0 +1,19 @@
+# OccSim（无人艇仿真）发布端健康度协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/health/v1.yml，因此 URN 为 usv/occsim/health/v1/Health。
+#
+# 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
+# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  Health:
+    arrow: Struct
+    description: "发布端健康度：已发送帧数、丢弃帧数、仿真时刻（s）"
+    fields:
+      - name: sent
+        type: UInt64
+      - name: dropped
+        type: UInt64
+      - name: simTime
+        type: Float64

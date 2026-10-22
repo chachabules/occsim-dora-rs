@@ -1,0 +1,30 @@
+# 本文件由 `occsim-dora-rs gen-dataflow` 生成，请勿手改。
+# 实例端口来自 ports.yaml；新增传感器后重跑生成器并重启数据流。
+debug:
+  enable_debug_inspection: true
+nodes:
+  - id: occsim-bridge
+    path: "target/release/occsim-dora-rs.exe"
+    build: "cargo build --release"
+    inputs:
+      tick: dora/timer/millis/50
+    outputs:
+      - gps-mast__gps
+      - imu-main__imu
+      - ins-main__ins
+      - odom-main__odom
+      - health__health
+      - radar-mast__odom
+      - rgb-bow__image
+      - lidar-mast__pointcloud
+      - state__state
+    output_types:
+      gps-mast__gps: usv/occsim/gps/v1/GpsFix
+      imu-main__imu: usv/occsim/imu/v1/ImuSample
+      ins-main__ins: usv/occsim/ins/v1/InsState
+      odom-main__odom: usv/occsim/odom/v1/OdomState
+      health__health: usv/occsim/health/v1/Health
+      radar-mast__odom: usv/occsim/odom/v1/OdomState
+      rgb-bow__image: std/media/v1/Image
+      lidar-mast__pointcloud: usv/occsim/pointcloud/v1/PointCloud
+      state__state: usv/occsim/state/v1/SimState
