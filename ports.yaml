@@ -31,7 +31,7 @@ instances:
   - sensor: health
     kind: health
   - sensor: radar-mast
-    kind: odom
+    kind: image
   - sensor: rgb-bow
     kind: image
   - sensor: lidar-mast

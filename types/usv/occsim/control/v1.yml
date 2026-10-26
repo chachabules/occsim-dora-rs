@@ -1,0 +1,69 @@
+# OccSim（无人艇仿真）控制指令协议。
+#
+# URN 规则：types/<prefix>/vN.yml → <prefix>/vN/<TypeName>
+# 本文件即 types/usv/occsim/control/v1.yml，因此 URN 为
+#   usv/occsim/control/v1/ControlCmd    —— 桥接节点的输入（input_types）
+#   usv/occsim/control/v1/ControlToken  —— 桥接节点的输入：临时配对令牌
+#   usv/occsim/control/v1/ControlAck    —— 桥接节点的输出，回传浏览器 ACK
+#
+# 方向与观测相反：观测是桥接输出、外部订阅；控制是外部发布、桥接消费。
+# 桥接把 ControlCmd 翻译成 Zenoh 主题 <prefix>/cmd/{control,estop,release}。
+# 传输层字段不进数据流，全部由桥接内部生成：seq、sentAt、pairToken、leaseId
+# 与 validUntil（= state.simTime + 0.5 s）。这样控制包里只表达「想怎么开船」。
+#
+# 唯一例外是令牌本身：网页「接入程序 > 允许外部控制」给的临时令牌（pairToken）
+# 走独立的 ControlToken 端口下发，不进 dataflow.yml、不落盘、不进日志。
+# 桥接收到后只存在内存里；换令牌会让桥接交还旧租约、重新发现运行前缀。
+#
+# 数值约定：
+#   - 控制量归一化到 [-1, 1]；0 表示「停车 / 回中」，是有效指令，不能当缺省；
+#   - 不适用的字段填 NaN（不是 0），下游据此区分「没给」与「给 0」；
+#   - 推进二选一：throttle，或 port（左桨）+ starboard（右桨），同时给视为非法；
+#     kind=control 时四种推进字段全为 NaN 同样非法（没有推进量的控制包没有意义）；
+#   - steering 可与任一推进方式共存，NaN 时按 0 下发（直舵）；
+#   - 建议 10 Hz 持续下发：桥接侧每包有效期 500 ms（必须大于 400 ms 的静默释放，
+#     否则网页会先按 validUntil 作废租约），停发 350 ms 网页自动释放。
+#
+# kind 取值：
+#   - control：带推进量，桥接先取租约再下发；
+#   - estop：急停，不带推进量（推进字段填 NaN），桥接随后放弃租约；
+#   - release：主动交还控制权，不带推进量。
+#
+# 这三个类型都不属于八个观测 kind，不要加进 routing::TYPE_PORTS，也不参与端口
+# 路由：它们只作为 cmd / cmd_token / cmd_ack 三个固定端口，在 dataflow.yml 里
+# 用 input_types / output_types 声明。
+#
+# 字段与实现必须逐字段一致（名称、Arrow 类型、可空性、顺序），由
+# encode::tests::control_protocol_declares_expected_fields 守护。
+# 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
+types:
+  ControlCmd:
+    arrow: Struct
+    description: "控制指令：kind=control 时推进二选一（throttle 或 port+starboard），另加 steering；estop/release 不带推进量，不适用字段为 NaN"
+    fields:
+      - name: kind
+        type: Utf8
+      - name: throttle
+        type: Float64
+      - name: steering
+        type: Float64
+      - name: port
+        type: Float64
+      - name: starboard
+        type: Float64
+  ControlToken:
+    arrow: Struct
+    description: "临时配对令牌：操控页填一次即下发，桥接存内存；空串表示清除令牌并交还控制权"
+    fields:
+      - name: token
+        type: Utf8
+  ControlAck:
+    arrow: Struct
+    description: "控制回执：浏览器 ACK 的结果，status=accepted 时 reason 为空串，rejected 时为拒绝原因；令牌下发的回执 kind=token"
+    fields:
+      - name: status
+        type: Utf8
+      - name: kind
+        type: Utf8
+      - name: reason
+        type: Utf8

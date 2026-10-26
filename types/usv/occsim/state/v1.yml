@@ -4,13 +4,14 @@
 # 本文件即 types/usv/occsim/state/v1.yml，因此 URN 为 usv/occsim/state/v1/SimState。
 #
 # 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
-# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 由 encode::tests::custom_kinds_match_declared_schema 守护。
 # 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
 types:
   SimState:
     arrow: Struct
-    description: "仿真状态：仿真时刻（s）、是否暂停、控制模式与当前任务"
+    description: "仿真状态：仿真时刻、暂停/控制模式/任务，以及船体实际运动与推进输出"
     fields:
+      # -- 仿真元信息（顶层）--
       - name: simTime
         type: Float64
       - name: paused
@@ -19,3 +20,32 @@ types:
         type: Utf8
       - name: mission
         type: Utf8
+      # -- 船体运动（网页 state.state 嵌套对象）--
+      - name: heading
+        type: Float64
+      - name: roll
+        type: Float64
+      - name: pitch
+        type: Float64
+      - name: n
+        type: Float64
+      - name: e
+        type: Float64
+      - name: d
+        type: Float64
+      # -- 推进：throttle/steering 是控制输入，left/right 是执行到两轴的杆量 --
+      - name: throttle
+        type: Float64
+      - name: steering
+        type: Float64
+      - name: left
+        type: Float64
+      - name: right
+        type: Float64
+      # -- shafts[0] / shafts[1] 的实际转速（网页 propulsion=twin，顺序左→右）--
+      - name: rpmPort
+        type: Float64
+      - name: rpmStarboard
+        type: Float64
+      - name: thrust
+        type: Float64

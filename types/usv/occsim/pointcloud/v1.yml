@@ -4,7 +4,7 @@
 # 本文件即 types/usv/occsim/pointcloud/v1.yml，因此 URN 为 usv/occsim/pointcloud/v1/PointCloud。
 #
 # 字段与 src/encode.rs 中的 StructArray 构造必须逐字段一致（名称、Arrow 类型、可空性），
-# 由 encode::tests::every_kind_matches_declared_schema 守护。
+# 由 encode::tests::custom_kinds_match_declared_schema 守护。
 # 可用类型：Boolean / Int8..64 / UInt8..64 / Float32 / Float64 / Utf8 / LargeBinary / Struct / List<T>
 types:
   PointCloud:

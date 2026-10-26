@@ -44,6 +44,46 @@ pub struct KeyParts {
     pub run_id: String,
 }
 
+/// 图像 JSON 头里要透传给下游的标量；缺失即 `None`（相机没有雷达那几项）。
+///
+/// 这些量不进 Arrow 结构体（`image` 必须与 `std/media/v1/Image` 一致），
+/// 只作为 dora 的 `Parameter` 随消息下发。
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImageMeta {
+    /// 采集时刻，仿真秒；各类图像都有。
+    pub capture_time: Option<f64>,
+    /// 雷达 PPI 量程，米。
+    pub range: Option<f64>,
+    /// 天线当前方位，弧度。
+    pub azimuth: Option<f64>,
+    /// 天线方位角的参考基准（艇艏朝向），弧度。
+    pub antenna_heading: Option<f64>,
+    /// 天线转速，rpm。
+    pub rotation_rpm: Option<f64>,
+    /// PPI 是否艇艏朝上；决定方位刻度绕哪个基准旋转。
+    pub heading_up: Option<bool>,
+}
+
+impl ImageMeta {
+    /// 从 JSON 头里挑出关心的几项；非数值一律视为缺失。
+    pub fn from_header(header: &Value) -> Self {
+        let number = |key: &str| header.get(key).and_then(Value::as_f64);
+        Self {
+            capture_time: number("captureTime"),
+            range: number("range"),
+            azimuth: number("azimuth"),
+            antenna_heading: number("antennaHeading"),
+            rotation_rpm: number("rotationRpm"),
+            heading_up: header.get("headingUp").and_then(Value::as_bool),
+        }
+    }
+
+    /// 是否带雷达几何量：有量程且知道天线指向。
+    pub fn is_radar(&self) -> bool {
+        self.range.is_some() && (self.azimuth.is_some() || self.antenna_heading.is_some())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Body {
     Image {
@@ -52,6 +92,8 @@ pub enum Body {
         channels: u8,
         encoding: String,
         pixels: Vec<u8>,
+        /// 头部里其余需要下发的标量（雷达极坐标、采集时刻）。
+        meta: ImageMeta,
     },
     PointCloud {
         width: u32,
@@ -59,6 +101,9 @@ pub enum Body {
         point_count: u32,
         /// 扁平 x/y/z/intensity，长度 = point_count * 4。
         points: Vec<f32>,
+        /// 头部里的雷达几何量；组织规格（lines/pointsPerLine）由 width/height 表达。
+        /// 与 image 共用同一套字段，不进 Arrow 结构体，只作为 metadata 下发。
+        meta: ImageMeta,
     },
     Json {
         value: Value,
@@ -192,6 +237,7 @@ fn decode_image(payload: &[u8]) -> Result<Body, DecodeError> {
         channels,
         encoding: encoding.to_string(),
         pixels: pixels.to_vec(),
+        meta: ImageMeta::from_header(&meta),
     })
 }
 
@@ -205,10 +251,8 @@ fn decode_pointcloud(payload: &[u8]) -> Result<Body, DecodeError> {
     let width = meta.get("width").and_then(Value::as_u64).unwrap_or(0);
     let height = meta.get("height").and_then(Value::as_u64).unwrap_or(0);
     let declared = meta.get("pointCount").and_then(Value::as_u64);
-    if width < 1
-        || width > CLOUD_WIDTH_LIMIT
-        || height < 1
-        || height > CLOUD_HEIGHT_LIMIT
+    if !(1..=CLOUD_WIDTH_LIMIT).contains(&width)
+        || !(1..=CLOUD_HEIGHT_LIMIT).contains(&height)
         || declared != Some(width * height)
     {
         return Err(DecodeError::DimensionsInvalid);
@@ -221,7 +265,7 @@ fn decode_pointcloud(payload: &[u8]) -> Result<Body, DecodeError> {
         });
     }
     let mut flat = Vec::with_capacity(count * 4);
-    for chunk in points.chunks_exact(16) {
+    for chunk in points.as_chunks::<16>().0 {
         for i in 0..4 {
             let offset = i * 4;
             flat.push(f32::from_le_bytes([
@@ -237,6 +281,7 @@ fn decode_pointcloud(payload: &[u8]) -> Result<Body, DecodeError> {
         height: height as u32,
         point_count: count as u32,
         points: flat,
+        meta: ImageMeta::from_header(&meta),
     })
 }
 
@@ -299,6 +344,38 @@ mod tests {
             } => {
                 assert_eq!((width, height, channels), (2, 2, 1));
                 assert_eq!(pixels, vec![1, 2, 3, 4]);
+            }
+            other => panic!("unexpected body: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn image_meta_keeps_radar_fields() {
+        let meta = r#"{"encoding":"mono8","width":2,"height":2,"captureTime":550.04,
+            "rotationRpm":24,"range":926,"headingUp":true,"azimuth":3.2289,"antennaHeading":-3.099}"#;
+        let payload = with_header(meta, &[0; 4]);
+        let record = decode("usv/v1/a/b/c/d/sensors/radar-mast/image", &payload).unwrap();
+        match record.body {
+            Body::Image { meta, .. } => {
+                assert!(meta.is_radar());
+                // 整数 `926` / `24` 一律按 f64 取出，下游不必区分整型与浮点。
+                assert_eq!(meta.range, Some(926.0));
+                assert_eq!(meta.rotation_rpm, Some(24.0));
+                assert_eq!(meta.capture_time, Some(550.04));
+                assert_eq!(meta.heading_up, Some(true));
+            }
+            other => panic!("unexpected body: {other:?}"),
+        }
+
+        // 普通相机：只有 captureTime，不带雷达几何量。
+        let meta = r#"{"encoding":"rgba8","width":1,"height":1,"captureTime":592.68}"#;
+        let payload = with_header(meta, &[0; 4]);
+        let record = decode("usv/v1/a/b/c/d/sensors/rgb-bow/image", &payload).unwrap();
+        match record.body {
+            Body::Image { meta, .. } => {
+                assert!(!meta.is_radar());
+                assert_eq!(meta.capture_time, Some(592.68));
+                assert_eq!(meta.range, None);
             }
             other => panic!("unexpected body: {other:?}"),
         }

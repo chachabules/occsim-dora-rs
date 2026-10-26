@@ -8,23 +8,50 @@ nodes:
     build: "cargo build --release"
     inputs:
       tick: dora/timer/millis/50
+      cmd: occsim-display/cmd
+      cmd_token: occsim-display/cmd_token
+    input_types:
+      cmd: usv/occsim/control/v1/ControlCmd
+      cmd_token: usv/occsim/control/v1/ControlToken
     outputs:
       - gps-mast__gps
       - imu-main__imu
       - ins-main__ins
       - odom-main__odom
       - health__health
-      - radar-mast__odom
+      - radar-mast__image
       - rgb-bow__image
       - lidar-mast__pointcloud
       - state__state
+      - cmd_ack
     output_types:
       gps-mast__gps: usv/occsim/gps/v1/GpsFix
       imu-main__imu: usv/occsim/imu/v1/ImuSample
       ins-main__ins: usv/occsim/ins/v1/InsState
       odom-main__odom: usv/occsim/odom/v1/OdomState
       health__health: usv/occsim/health/v1/Health
-      radar-mast__odom: usv/occsim/odom/v1/OdomState
+      radar-mast__image: std/media/v1/Image
       rgb-bow__image: std/media/v1/Image
       lidar-mast__pointcloud: usv/occsim/pointcloud/v1/PointCloud
       state__state: usv/occsim/state/v1/SimState
+      cmd_ack: usv/occsim/control/v1/ControlAck
+  - id: occsim-display
+    path: "D:/app/anaconda3/envs/occsim/python.exe"
+    args: "-u display-py/main.py"
+    inputs:
+      gps-mast__gps: occsim-bridge/gps-mast__gps
+      imu-main__imu: occsim-bridge/imu-main__imu
+      ins-main__ins: occsim-bridge/ins-main__ins
+      odom-main__odom: occsim-bridge/odom-main__odom
+      health__health: occsim-bridge/health__health
+      radar-mast__image: occsim-bridge/radar-mast__image
+      rgb-bow__image: occsim-bridge/rgb-bow__image
+      lidar-mast__pointcloud: occsim-bridge/lidar-mast__pointcloud
+      state__state: occsim-bridge/state__state
+      cmd_ack: occsim-bridge/cmd_ack
+    outputs:
+      - cmd
+      - cmd_token
+    output_types:
+      cmd: usv/occsim/control/v1/ControlCmd
+      cmd_token: usv/occsim/control/v1/ControlToken

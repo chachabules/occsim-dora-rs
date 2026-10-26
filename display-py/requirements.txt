@@ -1,0 +1,4 @@
+dora-rs==1.1.0
+PySide6>=6.6
+numpy>=1.26
+pyarrow>=14.0

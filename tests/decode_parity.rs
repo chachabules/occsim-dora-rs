@@ -63,7 +63,9 @@ fn rust_outcome(case: &Case) -> Value {
         Body::PointCloud { points, .. } => {
             let count = points.len() / 4;
             let finite = points
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .filter(|point| point[..3].iter().all(|value| value.is_finite()))
                 .count();
             value["points"] = json!(count);

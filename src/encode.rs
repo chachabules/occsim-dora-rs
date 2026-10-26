@@ -35,6 +35,7 @@ pub fn encode(kind: &str, body: &Body) -> Option<ArrayRef> {
             height,
             point_count,
             points,
+            ..
         } => {
             let mut raw = Vec::with_capacity(points.len() * 4);
             for value in points {
@@ -62,6 +63,10 @@ fn encode_json(kind: &str, value: &Value) -> Option<ArrayRef> {
             field_f64("vx", item(value, "velocity", 0)),
             field_f64("vy", item(value, "velocity", 1)),
             field_f64("vz", item(value, "velocity", 2)),
+            field_utf8("quality", &text(value, "quality")),
+            field_utf8("frameId", &text(value, "frameId")),
+            field_u64("sequence", uint(value, "sequence")),
+            field_f64("captureTime", number(value, "captureTime")),
         ],
         "imu" => vec![
             field_f64("fx", item(value, "specificForce", 0)),
@@ -71,6 +76,9 @@ fn encode_json(kind: &str, value: &Value) -> Option<ArrayRef> {
             field_f64("wy", item(value, "angularVelocity", 1)),
             field_f64("wz", item(value, "angularVelocity", 2)),
             field_utf8("quality", &text(value, "quality")),
+            field_utf8("source", &text(value, "source")),
+            field_u64("sequence", uint(value, "sequence")),
+            field_f64("captureTime", number(value, "captureTime")),
         ],
         "ins" => vec![
             field_f64("px", item(value, "position", 0)),
@@ -81,6 +89,14 @@ fn encode_json(kind: &str, value: &Value) -> Option<ArrayRef> {
             field_f64("vz", item(value, "velocity", 2)),
             field_f64("heading", number(value, "heading")),
             field_utf8("filter", &text(value, "filter")),
+            field_f64("roll", number(value, "roll")),
+            field_f64("pitch", number(value, "pitch")),
+            field_utf8("quality", &text(value, "quality")),
+            field_utf8("mode", &text(value, "mode")),
+            field_u64("rejectedUpdates", uint(value, "rejectedUpdates")),
+            field_f64("innovation", number(value, "innovation")),
+            field_u64("sequence", uint(value, "sequence")),
+            field_f64("captureTime", number(value, "captureTime")),
         ],
         "odom" => vec![
             field_f64("px", item(value, "position", 0)),
@@ -91,24 +107,70 @@ fn encode_json(kind: &str, value: &Value) -> Option<ArrayRef> {
             field_f64("vz", item(value, "twist", 2)),
             field_f64("heading", number(value, "heading")),
             field_f64("distance", number(value, "distance")),
+            field_utf8("quality", &text(value, "quality")),
+            field_utf8("source", &text(value, "source")),
+            field_u64("sequence", uint(value, "sequence")),
+            field_f64("captureTime", number(value, "captureTime")),
         ],
-        "state" => vec![
-            field_f64("simTime", number(value, "simTime")),
-            field_bool(
-                "paused",
-                value.get("paused").and_then(Value::as_bool).unwrap_or(false),
-            ),
-            field_utf8("controlMode", &text(value, "controlMode")),
-            field_utf8("mission", &text(value, "mission")),
-        ],
+        // 网页把船体运动与推进放在 `state.state` 嵌套对象里，顶层是仿真元信息。
+        "state" => {
+            let hull = value.get("state");
+            let hull_number = |key: &str| hull.map(|hull| number(hull, key)).unwrap_or(f64::NAN);
+            // shafts[0] / shafts[1] 是左右两根轴的转速与推力明细
+            let shaft = |index: usize, key: &str| {
+                hull.and_then(|hull| hull.get("shafts"))
+                    .and_then(|shafts| shafts.get(index))
+                    .map(|shaft| number(shaft, key))
+                    .unwrap_or(f64::NAN)
+            };
+            vec![
+                field_f64("simTime", number(value, "simTime")),
+                field_bool(
+                    "paused",
+                    value.get("paused").and_then(Value::as_bool).unwrap_or(false),
+                ),
+                field_utf8("controlMode", &text(value, "controlMode")),
+                field_utf8("mission", &text(value, "mission")),
+                field_f64("heading", hull_number("heading")),
+                field_f64("roll", hull_number("roll")),
+                field_f64("pitch", hull_number("pitch")),
+                field_f64("n", hull_number("n")),
+                field_f64("e", hull_number("e")),
+                field_f64("d", hull_number("d")),
+                field_f64("throttle", hull_number("throttle")),
+                field_f64("steering", hull_number("steering")),
+                field_f64("left", hull_number("left")),
+                field_f64("right", hull_number("right")),
+                field_f64("rpmPort", shaft(0, "rpm")),
+                field_f64("rpmStarboard", shaft(1, "rpm")),
+                field_f64("thrust", hull_number("thrust")),
+            ]
+        }
         "health" => vec![
             field_u64("sent", uint(value, "sent")),
             field_u64("dropped", uint(value, "dropped")),
             field_f64("simTime", number(value, "simTime")),
+            field_f64("wallTime", number(value, "wallTime")),
+            field_bool(
+                "paused",
+                value.get("paused").and_then(Value::as_bool).unwrap_or(false),
+            ),
         ],
         _ => return None,
     };
     Some(build(columns))
+}
+
+/// 控制回执：`ControlAck` 的单行结构体，字段与
+/// `types/usv/occsim/control/v1.yml` 的 `ControlAck` 逐列对齐。
+///
+/// 它不属于八个观测 kind，端口固定为 `cmd_ack`，不经过 `routing::route`。
+pub fn encode_ack(ack: &crate::control::Ack) -> ArrayRef {
+    build(vec![
+        field_utf8("status", ack.status.as_str()),
+        field_utf8("kind", ack.kind.as_str()),
+        field_utf8("reason", &ack.reason),
+    ])
 }
 
 fn build(columns: Vec<(Field, ArrayRef)>) -> ArrayRef {
@@ -210,7 +272,19 @@ mod tests {
         let array = encode("gps", &body).unwrap();
         assert_eq!(
             field_names(&array),
-            ["fix", "latitude", "longitude", "altitude", "vx", "vy", "vz"]
+            [
+                "fix",
+                "latitude",
+                "longitude",
+                "altitude",
+                "vx",
+                "vy",
+                "vz",
+                "quality",
+                "frameId",
+                "sequence",
+                "captureTime"
+            ]
         );
         assert_eq!(array.len(), 1);
     }
@@ -237,6 +311,71 @@ mod tests {
         assert_eq!(latitude.value(0), 1.0);
         // 缺失项填 NaN 而不是 null：下游 to_numpy 直接得到 NaN，无需处理空值掩码。
         assert!(longitude.value(0).is_nan());
+    }
+
+    /// 网页把船体运动/推进放在 `state.state` 里，这里确认嵌套取值与 shafts 明细对得上。
+    #[test]
+    fn state_reads_nested_hull_fields() {
+        let body = Body::Json {
+            value: json!({
+                "simTime": 12.5,
+                "paused": false,
+                "controlMode": "manual",
+                "mission": "survey",
+                "state": {
+                    "heading": 1.25,
+                    "roll": 0.01,
+                    "pitch": -0.02,
+                    "n": 10.0,
+                    "e": 20.0,
+                    "d": 0.5,
+                    "throttle": 0.4,
+                    "steering": -0.1,
+                    "left": 0.45,
+                    "right": 0.35,
+                    "thrust": 120.0,
+                    "shafts": [
+                        {"rpm": 88.0, "thrust": 60.0},
+                        {"rpm": 70.0, "thrust": 60.0}
+                    ]
+                }
+            }),
+            raw: b"{}".to_vec(),
+        };
+        let array = encode("state", &body).unwrap();
+        let structure = array.as_any().downcast_ref::<StructArray>().unwrap();
+        let column = |index: usize| {
+            structure
+                .column(index)
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap()
+                .value(0)
+        };
+        assert_eq!(column(0), 12.5); // simTime
+        assert_eq!(column(4), 1.25); // heading
+        assert_eq!(column(12), 0.45); // left
+        assert_eq!(column(13), 0.35); // right
+        assert_eq!(column(14), 88.0); // rpmPort
+        assert_eq!(column(15), 70.0); // rpmStarboard
+        assert_eq!(column(16), 120.0); // thrust
+    }
+
+    /// 网页没给 `state.state` 时不能 panic，整列退化成 NaN。
+    #[test]
+    fn state_without_hull_is_nan() {
+        let body = Body::Json {
+            value: json!({"simTime": 1.0}),
+            raw: b"{}".to_vec(),
+        };
+        let array = encode("state", &body).unwrap();
+        let structure = array.as_any().downcast_ref::<StructArray>().unwrap();
+        let heading = structure
+            .column(4)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(heading.value(0).is_nan());
     }
 
     /// 协议文件的解析结果，只取本测试用到的部分。
@@ -276,10 +415,12 @@ mod tests {
         }
     }
 
-    /// 合并各传感器目录下的协议文件；同一类型名只应出现在一个文件里。
+    /// 合并各目录下的协议文件；同一类型名只应出现在一个文件里。
     ///
     /// `image` 不在其中：它复用 dora 内置的 `std/media/v1/Image`，由
     /// `image_matches_std_media_image` 单独校验。
+    /// `control` 也不经过 `encode`（它是桥接的输入），放在这里只为共用解析逻辑，
+    /// 由 `control_protocol_declares_expected_fields` 单独校验。
     fn declared_types() -> std::collections::BTreeMap<String, Declared> {
         let sources = [
             include_str!("../types/usv/occsim/pointcloud/v1.yml"),
@@ -289,6 +430,7 @@ mod tests {
             include_str!("../types/usv/occsim/odom/v1.yml"),
             include_str!("../types/usv/occsim/state/v1.yml"),
             include_str!("../types/usv/occsim/health/v1.yml"),
+            include_str!("../types/usv/occsim/control/v1.yml"),
         ];
         let mut merged = std::collections::BTreeMap::new();
         for (index, text) in sources.iter().enumerate() {
@@ -331,6 +473,7 @@ mod tests {
                     height: 1,
                     point_count: 1,
                     points: vec![1.0, 2.0, 3.0, 0.5],
+                    meta: crate::decode::ImageMeta::default(),
                 },
             ),
             (
@@ -427,6 +570,7 @@ mod tests {
                 channels: 1,
                 encoding: "mono8".into(),
                 pixels: vec![0, 255],
+                meta: crate::decode::ImageMeta::default(),
             },
         )
         .unwrap();
@@ -443,6 +587,63 @@ mod tests {
             assert_eq!(field.name(), name);
             assert_eq!(field.data_type(), data_type);
             assert!(field.is_nullable());
+        }
+    }
+
+    /// 控制协议是桥接的**输入**类型，不经过 `encode`，所以按声明逐字段核对。
+    #[test]
+    fn control_protocol_declares_expected_fields() {
+        let declared = declared_types();
+
+        let command = declared.get("ControlCmd").expect("types/ 里缺少 ControlCmd");
+        assert_eq!(command.arrow, "Struct");
+        let expected = [
+            ("kind", "Utf8"),
+            ("throttle", "Float64"),
+            ("steering", "Float64"),
+            ("port", "Float64"),
+            ("starboard", "Float64"),
+        ];
+        assert_eq!(command.fields.len(), expected.len(), "ControlCmd: 字段数");
+        for (field, (name, type_name)) in command.fields.iter().zip(expected) {
+            // 顺序也钉住：下游按列号或者按名取，改顺序必须先改协议。
+            assert_eq!(field.name, name, "ControlCmd 字段顺序");
+            assert_eq!(field.r#type, type_name, "ControlCmd.{name} 的 Arrow 类型");
+            assert!(
+                field.nullable,
+                "ControlCmd.{name} 必须可空：缺省值用 NaN 表达，null 也要能被接受"
+            );
+        }
+
+        let ack = declared.get("ControlAck").expect("types/ 里缺少 ControlAck");
+        assert_eq!(ack.arrow, "Struct");
+        let names: Vec<&str> = ack.fields.iter().map(|field| field.name.as_str()).collect();
+        assert_eq!(names, ["status", "kind", "reason"]);
+        assert!(
+            ack.fields.iter().all(|field| field.r#type == "Utf8"),
+            "ControlAck 的字段全是字符串"
+        );
+    }
+
+    /// 回执是桥接的输出，必须与 `ControlAck` 声明逐列一致（名称、类型、可空）。
+    #[test]
+    fn ack_matches_declared_schema() {
+        let array = encode_ack(&crate::control::Ack::new(
+            crate::control::Status::Rejected,
+            crate::control::Kind::Control,
+            "超出 [-1, 1]",
+        ));
+        let structure = array.as_any().downcast_ref::<StructArray>().unwrap();
+        let declared = declared_types();
+        let ack = declared.get("ControlAck").expect("types/ 里缺少 ControlAck");
+
+        assert_eq!(structure.len(), 1);
+        assert_eq!(structure.fields().len(), ack.fields.len());
+        for (index, declared_field) in ack.fields.iter().enumerate() {
+            let field = &structure.fields()[index];
+            assert_eq!(field.name(), &declared_field.name);
+            assert_eq!(arrow_name(field.data_type()), declared_field.r#type);
+            assert_eq!(field.is_nullable(), declared_field.nullable);
         }
     }
 
